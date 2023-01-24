@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.Configuration;
 using System.Text;
@@ -20,7 +21,15 @@ var JWTConfiguration = builder.Configuration.GetSection("JWT");
 
 services.Configure<JWTMaper>(JWTConfiguration);
 
-services.AddIdentity<IdentityUser, IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>();
+services.AddIdentity<IdentityUser, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequiredLength = 4;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireLowercase = false;
+
+}).AddEntityFrameworkStores<ApplicationDbContext>();
 
 services.AddScoped<IAuthService, AuthService>();
 
@@ -47,9 +56,11 @@ services.AddAuthentication(options =>
                       ValidAudience = builder.Configuration["JWT:Audience"],
                       IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Key"]))
                   };
+                 
               });
-
+services.AddAuthorization();
 services.AddControllers();
+services.AddMvc();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 services.AddEndpointsApiExplorer();
 services.AddSwaggerGen();
@@ -64,9 +75,25 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStatusCodePages(async statusCodeContext =>
+{
+    switch (statusCodeContext.HttpContext.Response.StatusCode)
+    {
+        case 401:
+            statusCodeContext.HttpContext.Response.StatusCode = 401;
+            await statusCodeContext.HttpContext.Response.WriteAsJsonAsync(new   { httpStatus = 401, Message = "Token Authentication Requirement" });
+            break;
+        case 403:
+            statusCodeContext.HttpContext.Response.StatusCode = 403;
+            await statusCodeContext.HttpContext.Response.WriteAsJsonAsync(new   { httpStatus = 403, Message = "Role Authentication Requirement" });
+            break;
+    }
+});
 
+app.UseRouting();
+
+app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
-
+ 
 app.Run();

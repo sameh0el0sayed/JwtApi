@@ -6,6 +6,6 @@ namespace JwtApi.Services
     {
         Task<AuthModel> RegisterAsync(RegisterRequestModel model);
         Task<AuthModel> GetTokenAsync(TokenRequestModel model);
-        Task<AuthModel> AddRoleAsync(AddRoleRequestModel model);
+        Task<AuthModel> AddUserRoleAsync(AddRoleRequestModel model);
     }
 }
