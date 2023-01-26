@@ -21,9 +21,11 @@ namespace JwtApi.Migrations
 
             migrationBuilder.InsertData(
                 table: "AspNetUsers",
-                 columns: new[] { "Id", "UserName", "NormalizedUserName", "Email", "NormalizedEmail", "EmailConfirmed", "PasswordHash", "SecurityStamp", "AccessFailedCount", "TwoFactorEnabled", "LockoutEnabled",  "PhoneNumberConfirmed" },
+                 columns: new[] { "Id", "UserName", "NormalizedUserName", "Email",
+                     "NormalizedEmail", "EmailConfirmed", "PasswordHash", "SecurityStamp",
+                     "AccessFailedCount", "TwoFactorEnabled", "LockoutEnabled",  "PhoneNumberConfirmed" , "Discriminator" },
                 values: new object[] { userID, "user", "user".ToUpper(), "user@email.com", "user@email.com".ToUpper(),true,
-                hasher.HashPassword(null, "userpassword"),string.Empty,0,false,false, false
+                hasher.HashPassword(null, "userpassword"),string.Empty,0,false,false, false,""
                 });
 
             migrationBuilder.InsertData(
@@ -41,9 +43,11 @@ namespace JwtApi.Migrations
 
             migrationBuilder.InsertData(
                 table: "AspNetUsers",
-                columns: new[] { "Id", "UserName", "NormalizedUserName", "Email", "NormalizedEmail", "EmailConfirmed", "PasswordHash", "SecurityStamp", "AccessFailedCount", "TwoFactorEnabled", "LockoutEnabled" , "PhoneNumberConfirmed" },
+                columns: new[] { "Id", "UserName", "NormalizedUserName", "Email",
+                    "NormalizedEmail", "EmailConfirmed", "PasswordHash", "SecurityStamp",
+                    "AccessFailedCount", "TwoFactorEnabled", "LockoutEnabled" , "PhoneNumberConfirmed", "Discriminator" },
                 values: new object[] { AdminUserID, "admin", "admin".ToUpper(), "admin@email.com", "admin@email.com".ToUpper(),true,
-                hasher.HashPassword(null, "adminpassword"),string.Empty,0,false,false ,false
+                hasher.HashPassword(null, "adminpassword"),string.Empty,0,false,false ,false,""
                 });
 
             migrationBuilder.InsertData(

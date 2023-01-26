@@ -21,7 +21,7 @@ var JWTConfiguration = builder.Configuration.GetSection("JWT");
 
 services.Configure<JWTMaper>(JWTConfiguration);
 
-services.AddIdentity<IdentityUser, IdentityRole>(options =>
+services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = true;
     options.Password.RequiredLength = 4;
@@ -52,9 +52,10 @@ services.AddAuthentication(options =>
                       ValidateIssuer = true,
                       ValidateAudience = true,
                       ValidateLifetime = true,
+                      IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Key"])),
                       ValidIssuer = builder.Configuration["JWT:Issuer"],
                       ValidAudience = builder.Configuration["JWT:Audience"],
-                      IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Key"]))
+                      ClockSkew=TimeSpan.Zero
                   };
                  
               });

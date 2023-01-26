@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JwtApi.Controllers
@@ -18,16 +19,18 @@ namespace JwtApi.Controllers
             _logger = logger;
         }
 
-        //[HttpGet]
-        //public IEnumerable<WeatherForecast> Get()
-        //{
-        //    return Enumerable.Range(1, 5).Select(index => new WeatherForecast
-        //    {
-        //        Date = DateTime.Now.AddDays(index),
-        //        TemperatureC = Random.Shared.Next(-20, 55),
-        //        Summary = Summaries[Random.Shared.Next(Summaries.Length)]
-        //    })
-        //    .ToArray();
-        //}
+        [HttpGet]
+        [Authorize]
+        public IActionResult Get()
+        {
+            return Ok("this Secure ");
+        }
+
+        [HttpGet("Normal")]
+        [Authorize]
+        public IActionResult Normal()
+        {
+            return Ok("Not Secure ");
+        }
     }
 }

@@ -1,21 +1,24 @@
 ﻿using JwtApi.Helper;
 using JwtApi.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace JwtApi.Services
 {
+
     public class AuthService : IAuthService
     {
-        private readonly UserManager<IdentityUser> _userManager;
+        private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly JWTMaper _jwt;
 
-        public AuthService(UserManager<IdentityUser> userManager, RoleManager<IdentityRole> roleManager, IOptions<JWTMaper> jwt)
+        public AuthService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IOptions<JWTMaper> jwt)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -38,7 +41,7 @@ namespace JwtApi.Services
                     Message = "Username is already registered!"
                 };
             }
-            var _user = new IdentityUser
+            var _user = new ApplicationUser
             {
                 UserName = model.Username,
                 Email = model.Email,
@@ -81,14 +84,25 @@ namespace JwtApi.Services
                 {
                    Message = errors.Substring(0, errors.Length - 1)
                 };
-            } 
- 
-            return await GetTokenAsync(new TokenRequestModel
-            {
-                Email = model.Email,
-                Password= model.Password
+            }
 
-            });
+            var jwtSecurityToken = await CreateJwtToken(_user);
+
+            var refreshToken = GenerateRefreshToken();
+            _user.RefreshTokens?.Add(refreshToken);
+            await _userManager.UpdateAsync(_user);
+
+            return new AuthModel
+            {
+                Email = _user.Email,
+                ExpireOn = jwtSecurityToken.ValidTo.ToLocalTime(),
+                IsAuthenticated = true,
+                Roles = new List<string> { "User" },
+                Token = new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken),
+                Username = _user.UserName,
+                RefreshToken = refreshToken.Token,
+                RefreshTokenExpiration = refreshToken.ExpiresOn.ToLocalTime()
+            };
         }
 
         public async Task<AuthModel> AddUserRoleAsync(AddRoleRequestModel model)
@@ -118,7 +132,7 @@ namespace JwtApi.Services
                 Roles = roleList.ToList(),
                 IsAuthenticated = true,
                 Token = new JwtSecurityTokenHandler().WriteToken(jwtSecurtyToken),
-                ExpireOn = jwtSecurtyToken.ValidTo
+                ExpireOn = jwtSecurtyToken.ValidTo.ToLocalTime()
 
             };
            
@@ -128,31 +142,48 @@ namespace JwtApi.Services
         public async Task<AuthModel> GetTokenAsync(TokenRequestModel model)
         {
             var _user=await _userManager.FindByEmailAsync(model.Email);
+            AuthModel authModel = new AuthModel();
 
             if (_user == null || !await _userManager.CheckPasswordAsync(_user, model.Password))
             {
-                return new AuthModel
-                {
-                    Message = "invalid email or password"
-                };
+                authModel.Message = "invalid email or password";
+                return authModel;
+               
             }
               
             var jwtSecurtyToken = await CreateJwtToken(_user);
             var roleList= await _userManager.GetRolesAsync(_user);
-            return new AuthModel
-            {
-                Username = _user.UserName,
-                Email = _user.Email,
-                Roles = roleList.ToList(),
-                IsAuthenticated = true,
-                Token = new JwtSecurityTokenHandler().WriteToken(jwtSecurtyToken),
-                ExpireOn = jwtSecurtyToken.ValidTo
 
-            };
+            authModel.Username = _user.UserName;
+            authModel.Email = _user.Email;
+            authModel.Roles = roleList.ToList();
+            authModel.IsAuthenticated = true;
+            authModel.Token = new JwtSecurityTokenHandler().WriteToken(jwtSecurtyToken);
+            authModel.ExpireOn = jwtSecurtyToken.ValidTo.ToLocalTime();
+
+            if (_user.RefreshTokens.Any(t=>t.IsActive))
+            {
+                var activeRefrishToken = _user.RefreshTokens.FirstOrDefault(t => t.IsActive);
+                authModel.RefreshToken = activeRefrishToken.Token;
+                authModel.RefreshTokenExpiration = activeRefrishToken.ExpiresOn.ToLocalTime();
+
+            }
+            else
+            {
+                var newRefrishToken = GenerateRefreshToken();
+                authModel.RefreshToken = newRefrishToken.Token;
+                authModel.RefreshTokenExpiration = newRefrishToken.ExpiresOn.ToLocalTime();
+
+                _user.RefreshTokens.Add(newRefrishToken);
+                await _userManager.UpdateAsync(_user);
+
+            }
+            return authModel;
+
         }
 
 
-        public async Task<JwtSecurityToken> CreateJwtToken(IdentityUser model)
+        public async Task<JwtSecurityToken> CreateJwtToken(ApplicationUser model)
         {
             var userClaims = await _userManager.GetClaimsAsync(model);
             var roles = await _userManager.GetRolesAsync(model);
@@ -180,11 +211,83 @@ namespace JwtApi.Services
                 issuer: _jwt.Issuer,
                 audience: _jwt.Audience,
                 claims: claims,
-                expires: DateTime.Now.AddDays(_jwt.DurationInDays),
+                expires: DateTime.Now.AddMinutes(_jwt.DurationInMinutes),
                 signingCredentials: signingCredentials);
  
         }
 
+        public async Task<AuthModel> RefreshTokenAsync(string token)
+        {
+            var _user = await _userManager.Users.SingleOrDefaultAsync(u => u.RefreshTokens.Any(t => t.Token == token));
+ 
+            if (_user is null )
+                return new AuthModel { Message = "Invalid user ID " };
 
+            var refreshToken = _user.RefreshTokens.Single(t => t.Token == token);
+
+            if (!refreshToken.IsActive || refreshToken is null)
+                return new AuthModel { Message = "Inactive token" };
+
+            refreshToken.RevokedOn= DateTime.UtcNow;
+
+            var newRefreshToken = GenerateRefreshToken();
+            _user.RefreshTokens.Add(newRefreshToken);
+            await _userManager.UpdateAsync(_user);
+
+
+            var jwtSecurtyToken = await CreateJwtToken(_user);
+            var roleList = await _userManager.GetRolesAsync(_user);
+            return new AuthModel
+            {
+                Username = _user.UserName,
+                Email = _user.Email,
+                Roles = roleList.ToList(),
+                IsAuthenticated = true,
+                Token = new JwtSecurityTokenHandler().WriteToken(jwtSecurtyToken),
+                ExpireOn = jwtSecurtyToken.ValidTo.ToLocalTime(),
+                RefreshToken=newRefreshToken.Token,
+                RefreshTokenExpiration=newRefreshToken.ExpiresOn.ToLocalTime()
+
+            };
+
+        }
+
+        public async Task<bool> RevokeTokenAsync(string token)
+        {
+
+            var _user = await _userManager.Users.SingleOrDefaultAsync(u => u.RefreshTokens.Any(t => t.Token == token));
+
+            if (_user is null)
+                return false;
+
+            var refreshToken = _user.RefreshTokens.Single(t => t.Token == token);
+
+            if (!refreshToken.IsActive || refreshToken is null)
+                return false;
+            var refreshTokenExpiration = _user;
+
+            refreshToken.RevokedOn = DateTime.UtcNow;
+
+            await _userManager.UpdateAsync(_user);
+
+            return true;
+
+        }
+
+        private RefreshToken GenerateRefreshToken()
+        {
+            var randomNumber = new byte[32];
+
+            using var generator = new RNGCryptoServiceProvider();
+
+            generator.GetBytes(randomNumber);
+
+            return new RefreshToken
+            {
+                Token = Convert.ToBase64String(randomNumber),
+                ExpiresOn = DateTime.UtcNow.AddDays(_jwt.DurationInDays),
+                CreatedOn = DateTime.UtcNow
+            };
+        }
     }
 }
